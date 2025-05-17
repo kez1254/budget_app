@@ -136,7 +136,7 @@ def main():
 
         elif tab == "🚪 Déconnexion":
             st.session_state.user_id = None
-            st.experimental_rerun()
+            st.rerun()
 
 if __name__ == "__main__":
     main()
