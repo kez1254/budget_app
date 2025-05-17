@@ -1,3 +1,4 @@
+
 import streamlit as st
 import sqlite3
 import pandas as pd
@@ -14,7 +15,8 @@ c.execute('''
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
-    password TEXT
+    password TEXT,
+    salary REAL
 )
 ''')
 
@@ -31,13 +33,12 @@ CREATE TABLE IF NOT EXISTS expenses (
 
 conn.commit()
 
-# Auth functions
 def hash_password(pw):
     return sha256(pw.encode()).hexdigest()
 
-def register_user(username, password):
+def register_user(username, password, salary):
     try:
-        c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hash_password(password)))
+        c.execute("INSERT INTO users (username, password, salary) VALUES (?, ?, ?)", (username, hash_password(password), salary))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
@@ -47,7 +48,11 @@ def login_user(username, password):
     c.execute("SELECT id FROM users WHERE username = ? AND password = ?", (username, hash_password(password)))
     return c.fetchone()
 
-# App main
+def get_user_salary(user_id):
+    c.execute("SELECT salary FROM users WHERE id = ?", (user_id,))
+    row = c.fetchone()
+    return row[0] if row else 0
+
 def main():
     st.set_page_config(page_title="Budget App", layout="centered")
     st.title("💰 Budget-App")
@@ -62,8 +67,9 @@ def main():
         st.subheader("Créer un nouveau compte")
         new_user = st.text_input("Nom d'utilisateur")
         new_pass = st.text_input("Mot de passe", type="password")
+        salaire = st.number_input("💶 Votre salaire mensuel (€)", min_value=0.0, step=10.0)
         if st.button("S'inscrire"):
-            if register_user(new_user, new_pass):
+            if register_user(new_user, new_pass, salaire):
                 st.success("Utilisateur créé. Connectez-vous.")
             else:
                 st.error("Nom d'utilisateur déjà pris.")
@@ -82,7 +88,6 @@ def main():
 
     if st.session_state.user_id:
         st.sidebar.success("Connecté")
-
         tab = st.sidebar.radio("Navigation", ["➕ Ajouter dépense", "📊 Tableau de bord", "📤 Export Excel", "🚪 Déconnexion"])
 
         if tab == "➕ Ajouter dépense":
@@ -103,10 +108,12 @@ def main():
             df = pd.DataFrame(c.fetchall(), columns=["Date", "Montant", "Catégorie", "Description"])
             if not df.empty:
                 st.dataframe(df)
-
-                # Totaux
-                st.info(f"Total : {df['Montant'].sum():.2f} €")
-                # Camembert
+                total_dep = df["Montant"].sum()
+                salaire = get_user_salary(st.session_state.user_id)
+                st.info(f"💶 Salaire déclaré : {salaire:.2f} €")
+                st.success(f"💰 Total des dépenses : {total_dep:.2f} €")
+                if total_dep > salaire:
+                    st.error("🚨 Alerte : Vous avez dépassé votre budget mensuel !")
                 pie_data = df.groupby("Catégorie")["Montant"].sum()
                 fig1, ax1 = plt.subplots()
                 ax1.pie(pie_data, labels=pie_data.index, autopct="%.1f%%")
